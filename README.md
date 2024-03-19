@@ -4,6 +4,8 @@
 
 # 데이터셋 다운로드
 
+KITTI 데이터셋을 사용합니다.
+
 ## Requirements
 
 unzip 패키지가 필요합니다.
