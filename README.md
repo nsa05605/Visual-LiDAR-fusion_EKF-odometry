@@ -16,10 +16,10 @@ unzip 패키지가 필요합니다.
 sudo apt install unzip
 ```
 
-python의 패키지 gdown이 필요합니다.
+python의 패키지 gdown이 필요합니다. (sudo 필수)
 
 ```bash
-pip install gdown
+sudo pip install gdown
 ```
 
 ## 실행
