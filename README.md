@@ -5,6 +5,8 @@
 # 데이터셋 다운로드
 
 KITTI 데이터셋을 사용합니다.
+다음의 경로를 통하여 수동으로 다운로드 받을 수 있습니다.
+https://drive.google.com/file/d/1jedKIILg7Dcd93Odyrlzjz8LAXN_2e-5/view?usp=drive_link
 
 ## Requirements
 
