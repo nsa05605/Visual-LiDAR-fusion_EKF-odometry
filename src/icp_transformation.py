@@ -1,7 +1,5 @@
 import numpy as np
 import open3d as o3d
-import os
-from tqdm.auto import tqdm
 
 bin_path = "./dataset/KITTI/00/velodyne"
 pcd_path = "./dataset/KITTI/00/velodyne_pcd"
