@@ -11,20 +11,18 @@ file_name="KITTI.zip"
 file_path="${dataset_path}/${file_name}"
 
 # 데이터셋 경로 폴더 생성
-echo "(0/4) 데이터셋 폴더 생성 : ${dataset_path}"
+echo "(0/3) 데이터셋 폴더 생성 : ${dataset_path}"
 mkdir -p ${dataset_path}
 
 # 데이터셋 압축 파일 다운로드
-echo "(1/4) 데이터셋 파일 다운로드 : ${file_path}"
-gdown https://drive.google.com/uc?id=${file_id} -O ${file_path}
+echo "(1/3) 데이터셋 파일 다운로드 : ${file_path}"
+if [ ! -f "$file_path" ]; then
+    gdown https://drive.google.com/uc?id=${file_id} -O ${file_path}
+fi
 
 # 파일 압축 해제
-echo "(2/4) 데이터셋 파일 압축 해제"
+echo "(2/3) 데이터셋 파일 압축 해제"
 unzip ${file_path} -d ./dataset
 
-# 압축 파일 제거
-echo "(3/4) 데이터셋 압축 파일 제거"
-rm ${file_path}
-
 # 종료
-echo "(4/4) 데이터셋 다운로드 완료"
+echo "(3/3) 데이터셋 다운로드 완료"
