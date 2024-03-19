@@ -36,7 +36,10 @@ chmod +x download_dataset.sh
 
 ## Requirements
 
-파이썬의 numpy, open3d, tqdm 라이브러리가 필요합니다.
+다음의 파이썬 패키지가 필요합니다.
+- numpy
+- open3d
+- tqdm
 
 ```bash
 pip install numpy open3d tqdm
