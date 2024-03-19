@@ -30,3 +30,23 @@ sudo pip install gdown
 chmod +x download_dataset.sh
 ./download_dataset.sh
 ```
+
+
+# 라이다 데이터 시각화
+
+## Requirements
+
+파이썬의 numpy, open3d, tqdm 라이브러리가 필요합니다.
+
+```bash
+pip install numpy open3d tqdm
+```
+
+## 실행
+
+다음의 명령으로 라이다 데이터를 시각화할 수 있습니다.
+
+```bash
+python3 ./src/visualize_lidar.py
+```
+
