@@ -32,8 +32,7 @@ if not os.path.exists(pcd_path):
 if __name__ == "__main__":
     files = sorted(os.listdir(pcd_path))
 
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.io.read_point_cloud(pcd_path+"/000000.pcd").points
+    pcd = o3d.io.read_point_cloud(pcd_path+"/000000.pcd")
     
     vis = o3d.visualization.Visualizer()
     vis.create_window()
@@ -41,6 +40,7 @@ if __name__ == "__main__":
     
     for file in files:
         file_path = os.path.join(pcd_path, file)
+        
         pcd.points = o3d.io.read_point_cloud(file_path).points
         
         vis.update_geometry(pcd)
