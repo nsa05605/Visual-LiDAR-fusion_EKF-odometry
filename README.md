@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ## Implementation of visual-LiDAR odometry system using Extended Kalman Filter (EKF)
 
 - Participant : Jihoon Jung, Donghyun Lee, Beomsu Cho
@@ -53,3 +54,16 @@ pip install numpy open3d tqdm
 python3 ./src/visualize_lidar.py
 ```
 
+=======
+# Stereo Odometry 구현 부분
+
+### 목표
+: KITTI dataset을 사용한 stereo localization
+
+**Input**  
+  - stereo images
+  - calibration data(intrinsic, extrinsic)
+
+**Output**  
+  - Localization results(=trajectory)
+>>>>>>> jh_stereo

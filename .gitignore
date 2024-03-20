@@ -4,3 +4,7 @@
 
 # VS Code 설정 제위
 .vscode
+
+related_works/*
+
+build/*
