@@ -47,30 +47,61 @@ cv::Mat getCalib(string dataset_path, string N_Camera){
     return calibMat;
 }
 
+void calculate_rect(Mat img_l, Mat calib_l, Mat calib_r, Mat &R1, Mat &R2, Mat &P1, Mat &P2, Mat &Q){
+    Size imageSize = img_l.size();
 
-// stereo image를 입력 받아서 rectification 수행하는 함수
-cv::Mat stereo_rectify(Mat img_l, Mat img_r){
+    Mat intrinsicMat = calib_l(cv::Rect(0,0,3,3));
+    Mat dist = Mat::zeros(1, 5, CV_64F);
+    Mat R = Mat::eye(3,3, CV_64F);
+    Mat T = calib_r.col(3) * 0.001;
 
-
-
+    stereoRectify(intrinsicMat, dist, intrinsicMat, dist, imageSize, R, T, R1, R2, P1, P2, Q);
 }
 
-cv::Mat calculate_disparity(Mat img_l, Mat img_r){
+// stereo image를 입력 받아서 rectification 수행하는 함수
+void stereo_rectify(Mat img_l, Mat img_r, Mat calib_l, Mat calib_r, Mat &imgU1, Mat &imgU2, Mat R1, Mat R2, Mat P1, Mat P2, Mat Q){
 
-    // StereoBM
+    Size imageSize = img_l.size();
+
+    Mat intrinsicMat = calib_l(cv::Rect(0,0,3,3));
+    Mat dist = Mat::zeros(1, 5, CV_64F);
+    Mat R = Mat::eye(3,3, CV_64F);
+    Mat T = calib_r.col(3) * 0.001;
+
+    Mat map1x, map1y, map2x, map2y;
+    Mat imgRectify, img1Teste, img2Teste;
+    initUndistortRectifyMap(intrinsicMat, dist, R1, P1, img_l.size(), CV_32FC1, map1x, map1y);
+    initUndistortRectifyMap(intrinsicMat, dist, R2, P2, img_r.size(), CV_32FC1, map2x, map2y);
+
+    img1Teste = img_l.clone();
+    img2Teste = img_r.clone(); 
+    
+    cvtColor(img1Teste, img1Teste, cv::COLOR_BGR2RGB);
+    cvtColor(img2Teste, img2Teste, cv::COLOR_BGR2RGB);
+    
+    remap(img1Teste, imgU1, map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+    remap(img2Teste, imgU2, map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+
+    cvtColor(imgU1, imgU1, cv::COLOR_BGR2GRAY);
+    cvtColor(imgU2, imgU2, cv::COLOR_BGR2GRAY);
+}
+
+// stereo image를 입력 받아서 disparity를 계산하는 과정으로 stereo_rectify의 결과 이미지들이 나와야 함.
+void calculate_disparity(Mat img_l, Mat img_r, Mat &disparity){
+
     int ndisparities = 64;
     int blocksize = 15;
 
-    // create stereo image
-    Mat img_disparity_16s, img_disparity_8u;
+    Mat img_disparity_16s;
 
     cv::Ptr<cv::StereoBM> stereo = cv::StereoBM::create(ndisparities, blocksize);
+
+    cout << img_l.size() << endl;
+    cout << img_r.size() << endl;
+    
     stereo->compute(img_l, img_r, img_disparity_16s);
 
-    img_disparity_16s.convertTo(img_disparity_8u, CV_8UC1);
-
-    return img_disparity_8u;
-
+    img_disparity_16s.convertTo(disparity, CV_8UC1);
 }
 
 
@@ -126,65 +157,13 @@ int main(int argc, char* argv[]) {
 
     // Stereo rectification & disparity
     Mat R1, R2, P1, P2, Q;
-    Size imageSize = first_l.size();
+    Mat imgU1, imgU2, disparity;
 
-    Mat intrinsicMat = calib_l(cv::Rect(0,0,3,3));
-    Mat dist = Mat::zeros(1, 5, CV_64F);
-    Mat R = Mat::eye(3,3, CV_64F);
-    Mat T = calib_r.col(3) * 0.001;
-    // cout << intrinsicMat << endl;
-
-    stereoRectify(intrinsicMat, dist, intrinsicMat, dist, imageSize, R, T, R1, R2, P1, P2, Q);
-
-    cout << imageSize << endl;
-    cout << "R1 : " << R1 << endl;
-    cout << "R2 : " << R2 << endl;
-    cout << "P1 : " << P1 << endl;
-    cout << "P2 : " << P2 << endl;
-    cout << "Q : " << Q << endl;
-
-    Mat map1x, map1y, map2x, map2y;
-    Mat imgU1, imgU2, imgRectify, img1Teste, img2Teste;
-    initUndistortRectifyMap(intrinsicMat, dist, R1, P1, first_l.size(), CV_32FC1, map1x, map1y);
-    initUndistortRectifyMap(intrinsicMat, dist, R2, P2, first_r.size(), CV_32FC1, map2x, map2y);
-
-    img1Teste = first_l.clone();
-    img2Teste = first_r.clone(); 
-    
-    cvtColor(img1Teste, img1Teste, cv::COLOR_BGR2RGB);
-    cvtColor(img2Teste, img2Teste, cv::COLOR_BGR2RGB);
-    
-    remap(img1Teste, imgU1, map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
-    remap(img2Teste, imgU2, map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
-    
-    //imshow("image1", img1Teste);
-    //imshow("image2", img2Teste);
-    
-    //To display the rectified images
-    // imgRectify = Mat::zeros(imgU1.rows, imgU1.cols*2+10, imgU1.type());
-
-    // imgU1.copyTo(imgRectify(Range::all(), Range(0, imgU2.cols)));
-    // imgU2.copyTo(imgRectify(Range::all(), Range(imgU2.cols+10, imgU2.cols*2+10)));
-
-    // //If it is too large to fit on the screen, scale down by 2, it should fit.
-    // // if(imgRectify.cols > 1920){
-    // //     resize(imgRectify, imgRectify, Size(imgRectify.cols/2, imgRectify.rows/2));
-    // // }
-    
-    // //To draw the lines in the rectified image
-    // for(int j = 0; j < imgRectify.rows; j += 16){
-    //     Point p1 = Point(0,j);
-    //     Point p2 = Point(imgRectify.cols*2,j);
-    //     line(imgRectify, p1, p2, CV_RGB(255,0,0));
-    // }
-
-    // imshow("Rectified", imgRectify);
-
-    cvtColor(imgU1, imgU1, cv::COLOR_BGR2GRAY);
-    cvtColor(imgU2, imgU2, cv::COLOR_BGR2GRAY);
-    Mat disparity = calculate_disparity(imgU1, imgU2);
+    calculate_rect(first_l, calib_l, calib_r, R1, R2, P1, P2, Q);
+    stereo_rectify(first_l, first_r, calib_l, calib_r, imgU1, imgU2, R1, R2, P1, P2, Q);
+    calculate_disparity(imgU1, imgU2, disparity);
     imshow("disp", disparity);
-    waitKey();
+    waitKey(0);
 
     // for문으로 전체 처리
 
@@ -216,29 +195,9 @@ int main(int argc, char* argv[]) {
             return -1;
         }
 
-
-        // Mat disparity = calculate_disparity(curr_l, curr_r);
-        // imshow("disp", disparity);
-
-        initUndistortRectifyMap(intrinsicMat, dist, R1, P1, first_l.size(), CV_32FC1, map1x, map1y);
-        initUndistortRectifyMap(intrinsicMat, dist, R2, P2, first_r.size(), CV_32FC1, map2x, map2y);
-
-        img1Teste = curr_l.clone();
-        img2Teste = curr_r.clone(); 
-        
-        cvtColor(img1Teste, img1Teste, cv::COLOR_BGR2RGB);
-        cvtColor(img2Teste, img2Teste, cv::COLOR_BGR2RGB);
-        
-        remap(img1Teste, imgU1, map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
-        remap(img2Teste, imgU2, map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
-    
-
-        cvtColor(imgU1, imgU1, cv::COLOR_BGR2GRAY);
-        cvtColor(imgU2, imgU2, cv::COLOR_BGR2GRAY);
-        Mat disparity = calculate_disparity(imgU1, imgU2);
+        stereo_rectify(curr_l, curr_r, calib_l, calib_r, imgU1, imgU2, R1, R2, P1, P2, Q);
+        calculate_disparity(imgU1, imgU2, disparity);
         imshow("disp", disparity);
-
-
         imshow("curr_l", curr_l);
         imshow("curr_r", curr_r);
         waitKey(0);
