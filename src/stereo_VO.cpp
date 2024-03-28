@@ -1,4 +1,5 @@
 #include <stereo_VO.h>
+// #include <Open3D/Open3D.h>
 
 using namespace std;
 using namespace cv;
@@ -15,7 +16,7 @@ cv::Mat getCalib(string dataset_path, string N_Camera){
     }
 
     string line;
-    Mat calibMat = Mat(3, 4, CV_64F);
+    cv::Mat calibMat = Mat(3, 4, CV_64F);
 
     if(file.is_open()){
         while(getline(file, line)){
@@ -39,22 +40,81 @@ cv::Mat getCalib(string dataset_path, string N_Camera){
     return calibMat;
 }
 
-// stereo image를 입력 받아서 disparity를 계산하는 과정으로 stereo_rectify의 결과 이미지들이 나와야 함.
-void calculate_disparity(Mat img_l, Mat img_r, Mat &disparity){
+// stereo image를 입력 받아서 disparity를 계산하는 과정
+void calculate_disparity(cv::Mat img_l, cv::Mat img_r, Mat &disparity){
 
-    // int blocksize = 11;
+    cv::Mat img_disparity_16s;
+    // stereoBM->compute(img_l, img_r, img_disparity_16s);
+    stereoSGBM->compute(img_l, img_r, img_disparity_16s);
 
-    Mat img_disparity_16s;
+    img_disparity_16s.convertTo(disparity, CV_32F);
+    disparity = disparity / 16.0f;
+}
 
-    // cv::Ptr<cv::StereoSGBM> stereo = cv::StereoSGBM::create(0, ndisparities, blocksize, P1, P2);
 
-    // cout << img_l.size() << endl;
-    // cout << img_r.size() << endl;
+void calculate_depth(cv::Mat disparity, const double focal, const double baseline, cv::Mat &depth){
+
+    cv::Mat mask = (disparity == 0) | (disparity == -1);
+    disparity.setTo(0.1, mask);
+
+    depth = (focal * baseline) / disparity;
+}
+
+
+void ORBextract(cv::Mat img, std::vector<KeyPoint> &keys, cv::Mat &desc, const int nfeatures){
+    const float W = 200;
+
+    const int minBorderX = 16;
+    const int minBorderY = minBorderX;
+    const int maxBorderX = img.cols - 16;
+    const int maxBorderY = img.rows - 16;
+
+    keys.reserve(nfeatures * 5);
+
+    const float width = maxBorderX - minBorderX;
+    const float height = maxBorderY - minBorderY;
     
-    stereoBM->compute(img_l, img_r, img_disparity_16s);
-    // stereoSGBM->compute(img_l, img_r, img_disparity_16s);
+    const int nCols = width / W;
+    const int nRows = height / (W/2);
+    const int wCell = ceil(width/nCols);
+    const int hCell = ceil(height/nRows);
 
-    img_disparity_16s.convertTo(disparity, CV_8UC1);
+    for (int i = 0; i < nRows; i++)
+    {
+        const float iniY = minBorderY + i*hCell;
+        float maxY = iniY + hCell+6;
+        if(iniY>=maxBorderY-3)
+            continue;
+        if(maxY>maxBorderY)
+            maxY = maxBorderY;
+
+        for (int j = 0; j < nCols; j++)
+        {
+            const float iniX = minBorderX + j*wCell;
+            float maxX = iniX+wCell+6;
+            if(iniX>=maxBorderX-6)
+                continue;
+            if(maxX>maxBorderX)
+                maxX = maxBorderX;
+
+            vector<cv::KeyPoint> vKeysCell;
+            
+            orb->detect(img.rowRange(iniY,maxY).colRange(iniX,maxX), vKeysCell, Mat());
+
+            if(!vKeysCell.empty())
+            {
+                for(vector<cv::KeyPoint>::iterator vit=vKeysCell.begin(); vit!=vKeysCell.end();vit++)
+                {
+                    (*vit).pt.x+=j*wCell;
+                    (*vit).pt.y+=i*hCell;
+                    keys.push_back(*vit);
+                }            
+            }
+        }
+    }
+    // cout << keys.size() << endl;    // 1258
+
+    orb->compute(img, keys, desc);
 }
 
 
@@ -77,25 +137,40 @@ int main(int argc, char* argv[]) {
     }
 
     // Load calibration data
-    Mat proj_l = getCalib(dataset_path, "P0:");
-    Mat proj_r = getCalib(dataset_path, "P1:");
+    cv::Mat proj_l = getCalib(dataset_path, "P0:");
+    cv::Mat proj_r = getCalib(dataset_path, "P1:");
 
-    double f_x = proj_l.at<double>(0,0);
-    double f_y = proj_l.at<double>(1,1);
-    double c_x = proj_l.at<double>(0,2);
-    double c_y = proj_l.at<double>(1,2);
+    cv::Mat intrinsic, Rot, trans;
+    
+    // Projection matrix를 분해해서 intrinsic, extrinsic(R, t) 계산
+    cv::decomposeProjectionMatrix(proj_r, intrinsic, Rot, trans);
+    trans /= trans.at<double>(0,3);
 
+    double f_x = intrinsic.at<double>(0,0);
+    double f_y = intrinsic.at<double>(1,1);
+    double c_x = intrinsic.at<double>(0,2);
+    double c_y = intrinsic.at<double>(1,2);
+    double baseline = trans.at<double>(0,0);
+    // cout << baseline << endl;    // 0.537166
+
+    Mat Q = Mat::eye(4, 4, CV_64F);
+    Q.at<double>(0, 3) = -c_x;
+    Q.at<double>(1, 3) = -c_y;
+    Q.at<double>(2, 3) = f_x;
+    Q.at<double>(3, 3) = 0.0;
+    Q.at<double>(3, 2) = -1 / baseline;
 
     // Load first image pair
-    Mat first_l = imread(left_dir + "000000.png", CV_8UC1);
-    Mat first_r = imread(right_dir + "000000.png", CV_8UC1);
+    cv::Mat pred_l = imread(left_dir + "000000.png", CV_8UC1);
+    cv::Mat pred_r = imread(right_dir + "000000.png", CV_8UC1);
+    cv::Mat curr_l = imread(left_dir + "000001.png", CV_8UC1);
+    cv::Mat curr_r = imread(right_dir + "000001.png", CV_8UC1);
 
-    if (first_l.empty() || first_r.empty()) {
+    if (pred_l.empty() || pred_r.empty() || curr_l.empty() || curr_r.empty()) {
         cerr << "Failed to load images!" << endl;
         return -1;
     }
 
-    
     // 필요한 작업을 생각해보면
     // 1. stereo rectification
     //  -> https://alida.tistory.com/59
@@ -107,55 +182,116 @@ int main(int argc, char* argv[]) {
     // 5. calculate R, t
 
 
-
     // Stereo rectification & disparity
-    Mat R1, R2, P1, P2, Q;
-    Mat imgU1, imgU2, disparity;
+    cv::Mat disparity_p, disparity_c, depth_p, depth_c;
 
-    // calculate_rect(first_l, proj_l, proj_r, R1, R2, P1, P2, Q);
-    // stereo_rectify(first_l, first_r, proj_l, proj_r, imgU1, imgU2, R1, R2, P1, P2, Q);
-    calculate_disparity(first_l, first_r, disparity);
-    imshow("disp", disparity);
+    calculate_disparity(pred_l, pred_r, disparity_p);
+    calculate_disparity(curr_l, curr_r, disparity_c);
+
+    calculate_depth(disparity_p, f_x, baseline, depth_p);
+    calculate_depth(disparity_c, f_x, baseline, depth_c);
+
+
+    // double minD, maxD;
+    // cv::Point minLoc, maxLoc;
+    // cv::minMaxLoc(depth_p, &minD, &maxD, &minLoc, &maxLoc);
+    // std::cout << "Min value: " << minD << " at location: " << minLoc << std::endl;
+    // std::cout << "Max value: " << maxD << " at location: " << maxLoc << std::endl;
+
+
+    /////////////////////////////////////
+    // ORB feature 추출 후 매칭해서 R, t 계산
+    
+    // ORB feature 추출
+    // 이미지를 16등분? 정도 내서 각 부분에서 특징 뽑고 매칭하는 코드로 새로 짜보자
+    std::vector<cv::KeyPoint> key_curr, key_pred, key_local;
+    cv::Mat desc_curr, desc_pred, desc_local;
+
+    cv::Ptr<cv::DescriptorMatcher> Matcher_orb = cv::BFMatcher::create(cv::NORM_HAMMING);
+    std::vector<cv::DMatch> matches;
+
+
+
+    int nfeatures = 2000;
+    std::vector<cv::KeyPoint> vToDistributeKeys_curr, vToDistributeKeys_pred;
+
+    ORBextract(pred_l, vToDistributeKeys_pred, desc_pred, nfeatures);
+    ORBextract(curr_l, vToDistributeKeys_curr, desc_curr, nfeatures);
+
+    // ORB feature 매칭
+    Matcher_orb->match(desc_pred, desc_curr, matches);
+
+    sort(matches.begin(), matches.end());
+    const int match_size = matches.size();
+    std::vector<cv::DMatch> good_matches(matches.begin(), matches.begin() + (int)(match_size * 0.2f));
+
+    cv::Mat Result;
+    cv::drawMatches(pred_l, vToDistributeKeys_pred, curr_l, vToDistributeKeys_curr, good_matches, Result, cv::Scalar::all(-1), cv::Scalar(-1), vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+    // Draws the found matches of keypoints from two images.
+
+    imshow("Matching Result_ORB", Result);
     waitKey(0);
+    
+    // // 좋은 매칭 포인트로 변환 행렬 계산
+    // std::vector<Point2f> points_t, points_tplus1;
+    // for (size_t i = 0; i < good_matches.size(); i++) {
+    //     points_t.push_back(vToDistributeKeys_pred[good_matches[i].queryIdx].pt);
+    //     points_tplus1.push_back(vToDistributeKeys_curr[good_matches[i].trainIdx].pt);
+    // }
+    // // 디스패리티를 이용하여 3D 포인트 계산
+    // std::vector<Point3f> points_3d;
+    // for (int i = 0; i < points_t.size(); i++) {
+    //     float depth_value = depth_c.at<float>(points_t[i]); // 해당 점의 디스패리티 값
+    //     Point3f point_3d(points_t[i].x, points_t[i].y, depth_value);
+    //     points_3d.push_back(point_3d);
+    // }
+    // // 변환 행렬 계산
+    // Mat fundamental_matrix = findFundamentalMat(points_t, points_tplus1, FM_RANSAC);
 
-    // for문으로 전체 처리
+    // Mat essential_matrix = findEssentialMat(points_t, points_tplus1, f_x, c_x);
 
-    string filename_format = "%06d.png";
-    Mat curr_l, curr_r;
-    Mat pred_l, pred_r;
+    // Mat R, t;
+    // recoverPose(essential_matrix, points_t, points_tplus1, R, t);
 
-    for (int Frame = 1; Frame < num_images; Frame++){
-        // pred_lr을 이전 timestamp 프레임으로 저장
-        if (Frame == 1){
-            pred_l = first_l.clone();
-            pred_r = first_r.clone();
-        }
-        else{
-            pred_l = curr_l.clone();
-            pred_r = curr_r.clone();
-        }
+    // print(R);
+    // print(t);
 
-        char filename[100];
-        sprintf(filename, filename_format.c_str(), Frame);
-        string curr_filename_l = left_dir + filename;
-        string curr_filename_r = right_dir + filename;
 
-        curr_l = imread(curr_filename_l, CV_8UC1);
-        curr_r = imread(curr_filename_r, CV_8UC1);
+    // // for문으로 전체 처리
 
-        if (curr_l.empty() || curr_r.empty()) {
-            cerr << "Failed to load images!" << endl;
-            return -1;
-        }
+    // string filename_format = "%06d.png";
 
-        // stereo_rectify(curr_l, curr_r, calib_l, calib_r, imgU1, imgU2, R1, R2, P1, P2, Q);
-        calculate_disparity(curr_l, curr_r, disparity);
-        imshow("disp", disparity);
-        imshow("curr_l", curr_l);
-        imshow("curr_r", curr_r);
-        waitKey(0);
+    // for (int Frame = 2; Frame < num_images; Frame++){
+    //     // pred_lr을 이전 timestamp 프레임으로 저장
+    //     if (Frame == 2){
+    //         pred_l = curr_l.clone();
+    //         pred_r = curr_r.clone();
+    //     }
+    //     else{
+    //         pred_l = curr_l.clone();
+    //         pred_r = curr_r.clone();
+    //     }
 
-    }
+    //     char filename[100];
+    //     sprintf(filename, filename_format.c_str(), Frame);
+    //     string curr_filename_l = left_dir + filename;
+    //     string curr_filename_r = right_dir + filename;
+
+    //     curr_l = imread(curr_filename_l, CV_8UC1);
+    //     curr_r = imread(curr_filename_r, CV_8UC1);
+
+    //     if (curr_l.empty() || curr_r.empty()) {
+    //         cerr << "Failed to load images!" << endl;
+    //         return -1;
+    //     }
+
+    //     calculate_disparity(curr_l, curr_r, disparity_c, depth_c, Q);
+    //     imshow("curr_disp", disparity_c);
+    //     // imshow("curr_l", curr_l);
+    //     // imshow("curr_r", curr_r);
+    //     waitKey(0);
+
+    // }
 
 
 
