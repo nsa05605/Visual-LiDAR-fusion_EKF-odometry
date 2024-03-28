@@ -13,6 +13,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # OpenCV
 find_package(OpenCV REQUIRED)
 
+# find_package(Open3D)
+# if(NOT Open3D_FOUND)
+#     message(FATAL_ERROR "Open3D not found, please use -DCMAKE_INSTALL_PREFIX=open3d_install_dir")
+# endif()
+
 add_executable(stereo_VO src/stereo_VO.cpp)
 
 target_link_libraries(stereo_VO ${OpenCV_LIBS})
+# target_link_libraries(stereo_VO Open3D::Open3D)
