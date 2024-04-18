@@ -19,7 +19,7 @@ cv::Ptr<cv::StereoSGBM> stereoSGBM = cv::StereoSGBM::create(min_disparity, ndisp
 
 int nfeatures = 2000;
 cv::Mat desc_pred, desc_curr;
-cv::Ptr<cv::Feature2D> orb = cv::ORB::create(200, 1.2f, 8);
+cv::Ptr<cv::Feature2D> orb = cv::ORB::create(2200, 1.2f, 8);
 cv::Ptr<cv::DescriptorMatcher> Matcher_orb = cv::BFMatcher::create(cv::NORM_HAMMING);
 std::vector<cv::DMatch> matches;
 
