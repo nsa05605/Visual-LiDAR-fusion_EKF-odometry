@@ -271,8 +271,10 @@ int main(int argc, char* argv[]) {
 
         std::vector<cv::KeyPoint> vToDistributeKeys_curr, vToDistributeKeys_pred;
 
+        // 1. 패치로 나눠서 특징 추출 후 매칭하는 방법
         // ORBextract(pred_l, vToDistributeKeys_pred, desc_pred, nfeatures);
         // ORBextract(curr_l, vToDistributeKeys_curr, desc_curr, nfeatures);
+        // 2. 패치로 나누지 않고 특징 추출하는 방법
         orb->detectAndCompute(pred_l, cv::Mat(), vToDistributeKeys_pred, desc_pred);
         orb->detectAndCompute(curr_l, cv::Mat(), vToDistributeKeys_curr, desc_curr);
 

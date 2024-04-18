@@ -1,6 +1,10 @@
 # Implementation of visual-LiDAR odometry system using Extended Kalman Filter (EKF)
 
-- Participant : Jihoon Jung, Donghyun Lee, Beomsu Cho
+- 참여 : Jihoon Jung, Donghyun Lee, Beomsu Cho
+- 역할
+  - Stereo odometry : Jihoon Jung
+  - LiDAR odometry : Beomsu Cho
+  - Kalman filter : Donghyun Lee
 
 
 ### 데이터셋 다운로드
