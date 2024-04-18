@@ -206,7 +206,7 @@ int main(int argc, char* argv[]) {
     std::vector<Point2f> points_t, points_tplus1;
     for (size_t i = 0; i < good_matches.size(); i++) {
         float depth_value = depth.at<float>(vToDistributeKeys_pred[good_matches[i].queryIdx].pt);
-        if (depth_value > 3000) {continue;} // depth 값이 너무 크면 이상치(outlier)로 판단하여 제외함
+        if (depth_value > 100) {continue;} // depth 값이 너무 크면 이상치(outlier)로 판단하여 제외함
         points_t.push_back(vToDistributeKeys_pred[good_matches[i].queryIdx].pt);
         points_tplus1.push_back(vToDistributeKeys_curr[good_matches[i].trainIdx].pt);
     }
@@ -225,7 +225,7 @@ int main(int argc, char* argv[]) {
     // 이제 SolvePnPRansac 사용해서 Rotation, Translation 계산
     // solvePnPRansac은 회전을 rodrigues 형식으로 제공해주기 때문에, 이를 rotation matrix 형식으로 변환하는 과정을 거쳐야 함.
     cv::Mat est_R, est_T, R_matrix;
-    cv::solvePnPRansac(points_3d, points_tplus1, intrinsic, dist, est_R, est_T);
+    cv::solvePnPRansac(points_3d, points_tplus1, intrinsic, dist, est_R, est_T, false, 200);
     cv::Rodrigues(est_R, R_matrix);
 
     // 위에서 구한 R, t를 4x4 형태의 transformation matrix로 변환
@@ -239,10 +239,10 @@ int main(int argc, char* argv[]) {
     // -0.003087624753322628, -0.001940961752784845, 0.9999933495983145, -0.6557104889323022;
     // 0, 0, 0, 1]
 
-
+    // cv::namedWindow("Road facing camera", WINDOW_AUTOSIZE);// Create a window for display.
     cv::namedWindow("Trajectory", WINDOW_AUTOSIZE);// Create a window for display.
 
-    cv::Mat traj = cv::Mat::zeros(1000, 1000, CV_8UC3);
+    cv::Mat traj = cv::Mat::zeros(800, 800, CV_8UC3);
 
     // for문으로 전체 처리
 
@@ -271,22 +271,27 @@ int main(int argc, char* argv[]) {
 
         std::vector<cv::KeyPoint> vToDistributeKeys_curr, vToDistributeKeys_pred;
 
-        ORBextract(pred_l, vToDistributeKeys_pred, desc_pred, nfeatures);
-        ORBextract(curr_l, vToDistributeKeys_curr, desc_curr, nfeatures);
-
+        // ORBextract(pred_l, vToDistributeKeys_pred, desc_pred, nfeatures);
+        // ORBextract(curr_l, vToDistributeKeys_curr, desc_curr, nfeatures);
+        orb->detectAndCompute(pred_l, cv::Mat(), vToDistributeKeys_pred, desc_pred);
+        orb->detectAndCompute(curr_l, cv::Mat(), vToDistributeKeys_curr, desc_curr);
 
         Matcher_orb->match(desc_pred, desc_curr, matches);
         sort(matches.begin(), matches.end());
         const int match_size = matches.size();
-        std::vector<cv::DMatch> good_matches(matches.begin(), matches.begin() + (int)(match_size * 0.2f));
-        
+        std::vector<cv::DMatch> good_matches(matches.begin(), matches.begin() + (int)(match_size * 0.15f));
+        std::vector<cv::DMatch> filtered_matches;
 
         std::vector<Point2f> points_t, points_tplus1;
+        double avg_depth = 0;
         for (size_t i = 0; i < good_matches.size(); i++) {
             float depth_value = depth.at<float>(vToDistributeKeys_pred[good_matches[i].queryIdx].pt);
-            if (depth_value > 3000) {continue;} // depth 값이 너무 크면 이상치(outlier)로 판단하여 제외함
+            if (depth_value > 100 || depth_value <= 0) {continue;} // depth 값이 너무 크면 이상치(outlier)로 판단하여 제외함
+            if (good_matches[i].distance < 0.8) {continue;}
             points_t.push_back(vToDistributeKeys_pred[good_matches[i].queryIdx].pt);
             points_tplus1.push_back(vToDistributeKeys_curr[good_matches[i].trainIdx].pt);
+            filtered_matches.push_back(good_matches[i]);
+            avg_depth += depth_value;
         }
 
         std::vector<Point3f> points_3d;
@@ -300,7 +305,7 @@ int main(int argc, char* argv[]) {
 
 
         cv::Mat est_R, est_T, R_matrix;
-        cv::solvePnPRansac(points_3d, points_tplus1, intrinsic, dist, est_R, est_T);
+        cv::solvePnPRansac(points_3d, points_tplus1, intrinsic, dist, est_R, est_T, false, 500);
         cv::Rodrigues(est_R, R_matrix);
 
         cv::Mat curr_transform = cv::Mat::eye(4, 4, CV_64F);
@@ -308,15 +313,26 @@ int main(int argc, char* argv[]) {
         est_T.copyTo(curr_transform(cv::Rect(3, 0, 1, 3)));
 
         Transform = Transform * curr_transform;
-        cout << Transform << endl;
+        cout << "Frame : " << Frame << '\n' << Transform << endl;
 
-        int x = int(Transform.at<double>(0,3)) + 500;
-        int y = int(Transform.at<double>(2,3)) + 800;
+        int x = int(Transform.at<double>(0,3)) + 400;
+        int y = int(Transform.at<double>(2,3)) + 700;
         circle(traj, Point(x, y), 1, CV_RGB(255, 0, 0), 2);
 
         rectangle(traj, Point(10, 30), Point(550, 50), CV_RGB(0, 0, 0), cv::FILLED);
 
+        // 매칭점 그리기
+        cv::Mat img_matches, img_filtered_matches;
+        // cv::drawMatches(pred_l, vToDistributeKeys_pred, curr_l, vToDistributeKeys_curr, good_matches, img_matches);
+        cv::drawMatches(pred_l, vToDistributeKeys_pred, curr_l, vToDistributeKeys_curr, filtered_matches, img_filtered_matches);
+
+        // 결과 이미지 출력
+        // cv::imshow("Good Matches", img_matches);
+        cv::imshow("Filtered Matches", img_filtered_matches);
+        // imshow("Road facing camera", curr_l);
         imshow("Trajectory", traj);
+        cout << "Before : " << good_matches.size() << " | After : " << filtered_matches.size() << '\n';
+        cout << "Avg_detph : " << avg_depth / filtered_matches.size() << '\n';
         waitKey(1);
     }
 
