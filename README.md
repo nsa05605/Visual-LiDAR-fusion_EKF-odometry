@@ -73,4 +73,4 @@ python3 ./src/visualize_lidar.py
 
 **2024/04/14**
   - Stereo odometry 초기 구현 완료
-  - 중간에 시스템이 망가지는 현상 발생하여 수정 필요
+  - [구현 영상](https://www.notion.so/robotailab/e13c6fea80aa4be3b64b2a434bb7b0eb)
